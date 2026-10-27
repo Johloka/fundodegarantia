@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cartas Sem Nome</title>
+<style>
+:root{--bg:#faf6ee;--fg:#1d1a2b;--mut:#6f6a80;--pn:#fff;--bd:#e3dccb;--ac:#d9480f;--acf:#fff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12101c;--fg:#f4efe6;--mut:#9a95a8;--pn:#1c1a2e;--bd:#312e4a;--ac:#ffb347;--acf:#1d1a2b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12101c;--fg:#f4efe6;--mut:#9a95a8;--pn:#1c1a2e;--bd:#312e4a;--ac:#ffb347;--acf:#1d1a2b;color-scheme:dark}
+*{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font:16px/1.4 ui-rounded,"Trebuchet MS",system-ui,sans-serif}
+#app{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:1.5rem;margin:.2em 0}
+h3{margin:.8em 0 .4em}
+.mut{color:var(--mut);font-size:.9rem}
+input,button{font:inherit;border-radius:10px;border:1px solid var(--bd);padding:10px 12px;background:var(--pn);color:var(--fg)}
+button{cursor:pointer;background:var(--ac);color:var(--acf);border:0;font-weight:700}
+button:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pl{flex:1;min-width:100px;background:var(--pn);border:2px solid var(--bd);border-radius:12px;padding:8px 10px;font-size:.9rem}
+.pl.on{border-color:var(--ac)}
+.pl b{display:block;font-size:1rem}
+.pile{display:flex;gap:16px;align-items:center;justify-content:center;margin:14px 0}
+.card{background:var(--pn);border:2px solid var(--bd);border-radius:12px;padding:8px 10px;min-width:96px;text-align:center}
+.card .g{font-size:1.8rem}
+.card .v{font-weight:800;color:var(--ac)}
+.hand{display:flex;gap:8px;flex-wrap:wrap}
+.hand button{background:var(--pn);color:var(--fg);border:2px solid var(--bd);font-weight:400}
+.hand button:not(:disabled):hover{border-color:var(--ac)}
+.log{background:var(--pn);border:1px solid var(--bd);border-radius:12px;padding:8px 12px;font-size:.9rem;max-height:180px;overflow:auto;margin:10px 0}
+.log div:first-child{font-weight:700}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const $=s=>document.querySelector(s);
+const pick=a=>a[Math.random()*a.length|0],rnd=(a,b)=>a+(Math.random()*(b-a+1)|0);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clone=o=>JSON.parse(JSON.stringify(o));
+const GL=["🧀","🔔","🪑","🌵","🧦","🍄","🪐","🗝️","🥔","🦆","🕯️","🐌","🪣","🥄"];
+const S1=["Blu","Zim","Tor","Gru","Pef","Nax","Mô","Quil","Dre","Fa","Ul","Bor"],S2=["for","pa","tô","mix","lu","ga","nhe","sk","zo","ri"],S3=["","","","-X","ão","im","ela","ugo"];
+const word=()=>pick(S1)+pick(S2)+pick(S3);
+const mk=()=>({g:pick(GL),n:word(),v:rnd(1,9),e:rnd(0,14),a:rnd(1,4),s:rnd(0,1)});
+
+let R=null,G=null,P=[],isHost=false,my="",name="",code="",myK=0;
+const alive=i=>P.some(p=>p.peer==i);
+const best=(g,d)=>g.o.slice().sort((a,b)=>d*(g.sc[b]-g.sc[a]))[0];
+
+function newGame(ids,N,v){
+  const w=rnd(0,3),deck=Array.from({length:40},mk),h={},sc={};
+  ids.forEach(i=>{h[i]=deck.splice(0,5);sc[i]=0});
+  return{v,R:{w,l:w==3?rnd(14,24):rnd(12,30),m:rnd(0,3),f:w==2?1:rnd(0,1)},o:ids,N,t:0,dir:1,h,d:deck,p:[deck.pop()],sc,log:["Começou. Ninguém sabe o quê."],w:null,x:0,skip:0,ack:{}};
+}
+const draw=(g,i,n)=>{for(let k=0;k<n&&g.d.length;k++)g.h[i].push(g.d.pop())};
+
+function check(g){
+  const r=g.R;let w;
+  if(r.w==0)w=g.o.find(i=>g.sc[i]>=r.l);
+  else if(r.w==1)w=g.o.find(i=>!g.h[i].length);
+  else if(r.w==2&&!g.d.length)w=best(g,1);
+  else if(r.w==3&&g.p.length>=r.l)w=best(g,-1);
+  if(!w&&g.x>=45)w=best(g,1);
+  return w;
+}
+function adv(g,again){
+  if(again){g.skip=0;return}
+  let s=1+(g.skip?1:0);const n=g.o.length;g.skip=0;
+  while(s--)for(let k=0;k<n;k++){g.t=(g.t+g.dir+n)%n;const i=g.o[g.t];if(alive(i)&&g.h[i].length)break}
+}
+function play(g,pid,ci){
+  const c=g.h[pid][ci];if(!c)return;
+  g.h[pid].splice(ci,1);
+  const N=i=>g.N[i]||"?",top=g.p[g.p.length-1],r=g.R;
+  const ok=[c.g==top.g,c.v>top.v,(c.v+top.v)%2==1,true][r.m];
+  const oth=g.o.filter(i=>i!=pid),tg=c.s&&oth.length?pick(oth):pid,a=c.a,t=N(tg),L=[];
+  let again=false;
+  g.p.push(c);g.x++;
+  if(!ok){g.sc[pid]--;draw(g,pid,2);L.push(`${N(pid)} jogou ${c.g} ${c.n}. Nada. 🪙−1, +2 cartas`)}
+  else{
+    L.push(`${N(pid)} jogou ${c.g} ${c.n}.`);
+    switch(c.e){
+      case 0:g.sc[tg]+=a;L.push(`${t} 🪙+${a}`);break;
+      case 1:g.sc[tg]-=a;L.push(`${t} 🪙−${a}`);break;
+      case 2:draw(g,tg,a);L.push(`${t} ganhou cartas`);break;
+      case 3:for(let k=0;k<a&&g.h[tg].length;k++)g.h[tg].splice(rnd(0,g.h[tg].length-1),1);L.push(`${t} perdeu cartas`);break;
+      case 4:[g.h[pid],g.h[tg]]=[g.h[tg],g.h[pid]];L.push("mãos trocadas");break;
+      case 5:[g.sc[pid],g.sc[tg]]=[g.sc[tg],g.sc[pid]];L.push("placares trocados");break;
+      case 6:g.dir*=-1;L.push("o vento virou");break;
+      case 7:g.skip=1;L.push("alguém vai ficar de fora");break;
+      case 8:{const n=a+2;for(let k=0;k<n&&g.d.length<70;k++)g.d.push(mk());L.push(`baralho +${n}`)}break;
+      case 9:g.sc[tg]=a>2?Math.trunc(g.sc[tg]/2):g.sc[tg]*2;L.push(`${t} 🪙 mudou`);break;
+      case 10:again=true;L.push("de novo");break;
+      case 11:{const all=g.o.flatMap(i=>g.h[i]).sort(()=>Math.random()-.5),ns=g.o.map(i=>g.h[i].length);g.o.forEach((i,k)=>{g.h[i]=all.splice(0,ns[k])});L.push("mãos embaralhadas")}break;
+      case 12:g.h[tg].push({...mk(),v:rnd(7,9)});L.push(`um objeto apareceu com ${t}`);break;
+      case 13:{const w=word();L.push(`${t} agora é ${w}`);g.N[tg]=w}break;
+      default:g.R.l+=rnd(-3,3);L.push(pick(["o ar mudou","algo rangeu","silêncio"]));
+    }
+  }
+  if(r.f&&g.h[pid].length<5)draw(g,pid,1);
+  g.log=[L.join(" · "),...g.log].slice(0,8);
+  const w=check(g);
+  if(w){g.w=w;return}
+  adv(g,again);
+}
+function stuck(){
+  if(G.w!=null)return false;
+  const cur=G.o[G.t];
+  if(alive(cur)&&G.h[cur].length)return false;
+  if(G.o.some(i=>alive(i)&&G.h[i].length))adv(G,false);else G.w=best(G,1);
+  return true;
+}
+function push(){G.v++;R.presence({g:clone(G)});render()}
+function hostLoop(){
+  if(!G)return;
+  let ch=false;
+  if(G.w==null)P.forEach(p=>{
+    const m=p.presence.m,i=p.peer;
+    if(!m||p.isMe||m.k<=(G.ack[i]||0))return;
+    G.ack[i]=m.k;ch=true;
+    if(G.w==null&&G.o[G.t]==i)play(G,i,m.c);
+  });
+  if(stuck())ch=true;
+  if(ch)push();
+}
+function act(i){
+  if(!G||G.w!=null||G.o[G.t]!=my)return;
+  if(isHost){play(G,my,i);stuck();push()}
+  else R.presence({m:{k:++myK,c:i}});
+}
+function start(){
+  if(!isHost||P.length<2)return;
+  const pl=P.slice(0,3),N={};
+  pl.forEach(p=>N[p.peer]=p.presence.n);
+  G=newGame(pl.map(p=>p.peer),N,(G?G.v:0)+1);
+  push();
+}
+function sync(list){
+  P=list.filter(p=>p.presence&&p.presence.n).sort((a,b)=>a.presence.t-b.presence.t||(a.peer<b.peer?-1:1));
+  const me=P.find(p=>p.isMe);if(me)my=me.peer;
+  isHost=!!P[0]&&P[0].isMe;
+  let b=null;
+  P.forEach(p=>{const g=p.presence.g;if(g&&(!b||g.v>b.v))b=g});
+  if(b&&(!G||(isHost?b.v>G.v:b.v!==G.v)))G=clone(b);
+  if(isHost)hostLoop();
+  render();
+}
+
+const face=c=>`<div class="g">${c.g}</div>${esc(c.n)}<div class="v">${c.v}</div>`;
+function form(msg){
+  $("#app").innerHTML=`<h1>🃏 Cartas Sem Nome</h1><p class="mut">De 2 a 3 jogadores. Não existe manual. Ninguém sabe as regras. Boa sorte.</p><div class="row"><input id="nm" placeholder="Seu nome" maxlength="14" value="${esc(name)}"><input id="cd" placeholder="Código da mesa" maxlength="20" value="${esc(code||"mesa")}"><button id="go">Entrar</button></div><p id="er" class="mut">${esc(msg||"")}</p>`;
+  $("#go").onclick=go;
+}
+async function go(){
+  name=$("#nm").value.trim().slice(0,14);code=$("#cd").value.trim()||"mesa";
+  if(!name){$("#er").textContent="Digite um nome.";return}
+  $("#er").textContent="Conectando…";
+  try{
+    const room=netRoom();
+    if(!room)return form("Sem conexão com o servidor.");
+    R=room.join?await room.join(code):room;
+    R.onPeers(ch=>sync(ch.peers));
+    await R.presence({n:name,t:Date.now()});
+    sync(R.peers?R.peers():[]);
+  }catch(e){R=null;form("Não consegui conectar: "+(e&&e.message||"erro"))}
+}
+function render(){
+  if(!R)return;
+  const A=$("#app");
+  if(!G){
+    A.innerHTML=`<h1>🃏 Mesa “${esc(code)}”</h1><p class="mut">Jogadores (${P.length}/3):</p><div class="row">${P.map(p=>`<div class="pl"><b>${esc(p.presence.n)}${p.isMe?" (você)":""}</b></div>`).join("")}</div><p>${isHost?(P.length>=2?'<button id="st">Começar</button>':'<span class="mut">Esperando mais gente. Mande o link e o código da mesa.</span>'):'<span class="mut">Esperando o primeiro da mesa começar.</span>'}</p>`;
+  }else{
+    const top=G.p[G.p.length-1],cur=G.o[G.t],on=G.w==null,mine=on&&cur==my,pl=G.o.includes(my);
+    A.innerHTML=`<h1>🃏 Cartas Sem Nome</h1>
+<div class="row">${G.o.map(i=>`<div class="pl${on&&i==cur?" on":""}"><b>${esc(G.N[i])}${i==my?" (você)":""}</b>🪙 ${G.sc[i]} · 🎴 ${G.h[i].length}${alive(i)?"":" · saiu"}</div>`).join("")}</div>
+<div class="pile"><div class="card">${face(top)}</div><div class="mut">baralho: ${G.d.length}<br>pilha: ${G.p.length}</div></div>
+${on?`<p>${mine?"<b>Sua vez.</b> Jogue alguma coisa.":"Vez de "+esc(G.N[cur])+"."}</p>`:`<h3>${esc(G.N[G.w])} venceu. Provavelmente.</h3>${isHost&&P.length>=2?'<button id="st">Outra partida (regras novas)</button>':'<p class="mut">Esperando o anfitrião recomeçar.</p>'}`}
+<div class="log">${G.log.map(l=>`<div>${esc(l)}</div>`).join("")}</div>
+${pl?`<h3>Sua mão</h3><div class="hand">${G.h[my].map((c,k)=>`<button class="card" data-k="${k}"${mine?"":" disabled"}>${face(c)}</button>`).join("")}</div>`:'<p class="mut">Mesa cheia: você está só assistindo.</p>'}`;
+    A.querySelectorAll(".hand button").forEach(b=>b.onclick=()=>act(+b.dataset.k));
+  }
+  const s=$("#st");if(s)s.onclick=start;
+}
+function netRoom(){
+  const id=crypto.randomUUID?crypto.randomUUID():String(Math.random()).slice(2),mine={},subs=[];
+  let list=[],code="";
+  const post=patch=>fetch("/presence",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({room:code,id,patch})});
+  const api={
+    peers:()=>list,
+    onPeers:f=>{subs.push(f)},
+    async presence(p){Object.assign(mine,p);await post(p)},
+    async join(c){
+      code=c;
+      await new Promise((ok,no)=>{
+        const es=new EventSource("/events?room="+encodeURIComponent(c)+"&id="+id);
+        es.addEventListener("peers",e=>{list=JSON.parse(e.data).map(p=>({...p,isMe:p.peer==id}));subs.forEach(f=>f({peers:list}))});
+        es.addEventListener("hello",()=>{ok();if(Object.keys(mine).length)post(mine).catch(()=>{})});
+        es.onerror=()=>{if(es.readyState==2)no(new Error("sem conexão com o servidor"))};
+      });
+      return api;
+    }
+  };
+  return api;
+}
+
+form();
+</script>
+</body>
+</html>
